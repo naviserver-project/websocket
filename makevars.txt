@@ -1,0 +1,6 @@
+.DEFAULT_GOAL := install
+CURDIR := /usr/local/src/modules/websocket
+MAKEFILE_LIST :=  Makefile
+MAKEFLAGS = pn
+NAVISERVER = /usr/local/ns
+SHELL = /bin/sh

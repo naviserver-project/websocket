@@ -1,0 +1,92 @@
+
+Websockets for NaviServer
+=========================
+Release 0.1
+-----------
+
+    neumann@wu-wien.ac.at
+    wolfgang.winkler@digital-concepts.com
+
+This is a NaviServer module that implements websockets for NaviServer
+and provides an API for for it. The websockets are integrated in
+NaviServer using the ns_chan command, which will be part version
+4.99.7 of NaviServer.
+
+Connections are established via ws::handshake, which is typically
+initiated via JavaScript. Common libraries such as jQueries provided
+support for websockets. The command ws::handshake returns a handle for
+the connection channel, which can be used for further
+configuration. The handle has to be used for all other operations on
+the websocket, such as sending data to a single channel, or for
+subscribing / unsubscribing the channel from a subscription.
+
+The package contains two same websocket applications
+
+* chat: A simple chat application with the mere purpose to provide an
+  example how to use websockets
+  
+* log-view: A websocket application that allows live viewing of log
+  contents. It uses on a tcl-based "tail -f" like command that watches
+  certain files (e.g. access.log, or error.log) and reports recent
+  changes to the subscribed clients.
+
+By default, the sample applications are deactivated. See below in the
+configuration section how to activate the sample applications.
+
+The implementation is based on nsf, which is available from e.g.
+http://next-scripting.org/
+    
+***
+
+Configuration:
+--------------
+
+In order to configure websockets, add the following lines to the
+config file of NaviServer. The section module/websocket/$appname is
+optional and allows to configure the named websocket applications.
+
+When the section module/websocket/$appname is missing, or the "urls"
+parameter is empty, then the application is deactivated.  Via the urls
+parameters, multiple urls can be specified, under which the websocket
+applications are available. This way, one can e.g. define multiple
+chats with different subscriber lists.
+
+Be aware that the log-viewer might reveal internal information, so be
+careful when registering it on public sites. In the example below, we
+provide it under "/admin/", which is restricted for OpenACS to site
+wide administrators.
+
+    ns_section "ns/server/${server}/modules"
+       ns_param websocket tcl
+
+    ns_section "ns/server/${server}/module/websocket/chat"
+       ns_param urls     /websocket/chat
+
+    ns_section "ns/server/${server}/module/websocket/log-view"
+       ns_param urls     /admin/websocket/log-view
+       ns_param refresh  1000   ;# refresh time in milliseconds
+
+
+Usage:
+------
+
+The API consists of the the following commands:
+
+    ws::build_msg ?-opcode /value/? /payload/
+    ws::decode_msg /channel/ /msg/
+    ws::handshake ?-readevent /boolean/? ?-callback /script/?
+    ws::log /msg/
+    ws::multicast ?-exclude /value/? /subscription/ /msg/
+    ws::readable /channel/ /callback/ /when/
+    ws::send /channel/ /msg/
+    ws::subscribe /channel/ /subscription/
+    ws::unsubscribe /channel/ /subscription/
+
+
+Authors:
+--------
+
+    Gustaf Neumann neumann@wu-wien.ac.at
+    Wolfgang Winkler wolfgang.winkler@digital-concepts.com
+
+
