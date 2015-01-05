@@ -23,6 +23,7 @@ if {$urls eq ""} {
 # Register websocket log-viewer under every configured url
 #
 foreach url $urls {
+    ns_log notice "websocket: log-viewer available under $url"
     ns_register_adp  GET $url [file dirname [info script]]/log-view.adp
     ns_register_proc GET $url/connect ::ws::log::connect
     ns_register_proc GET $url/set ::ws::log::set_logging
@@ -140,8 +141,6 @@ namespace eval ws::log {
         }
     }
 }
-
-ns_log notice "===================================== baz loaded global [info script]"
 
 #
 # Local variables:
