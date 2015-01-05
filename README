@@ -1,5 +1,5 @@
 
-Websockets for NaviServer
+WebSockets for NaviServer
 =========================
 Release 0.1
 -----------
@@ -7,25 +7,34 @@ Release 0.1
     neumann@wu-wien.ac.at
     wolfgang.winkler@digital-concepts.com
 
-This is a NaviServer module that implements websockets for NaviServer
-and provides an API for for it. The websockets are integrated in
+This is a NaviServer module that implements WebSockets for NaviServer
+and provides an API for for it. The WebSockets are integrated in
 NaviServer using the ns_chan command, which will be part version
 4.99.7 of NaviServer.
 
 Connections are established via ws::handshake, which is typically
 initiated via JavaScript. Common libraries such as jQueries provided
-support for websockets. The command ws::handshake returns a handle for
-the connection channel, which can be used for further
-configuration. The handle has to be used for all other operations on
-the websocket, such as sending data to a single channel, or for
-subscribing / unsubscribing the channel from a subscription.
+support for WebSockets.
 
-The package contains two same websocket applications
+The WebSocket protocol (RFC 6455) defines a ws:// and wss:// prefix to
+indicate a WebSocket or a WebSocket Secure connection. Both schemes
+use the HTTP upgrade mechanism to upgrade to the WebSocket protocol.
+For WebSocket Secure connection, the NaviServer module nsssl has to be
+installed and configured.  For incoming HTTP/HTTPS connections the
+upgrade is provided via the command ws::handshake, which returns a
+handle for the connection channel. This handle has to be used for all
+other operations on the WebSocket, such as sending data to a single
+channel, or for subscribing / unsubscribing the channel from a
+subscription. The API provides means for encoding and decoding
+websocket messages and to send messages as single- or multi-casts
+using a subscriber interface.x
+
+The package contains two sample WebSocket applications:
 
 * chat: A simple chat application with the mere purpose to provide an
-  example how to use websockets
+  example how to use WebSockets
   
-* log-view: A websocket application that allows live viewing of log
+* log-view: A WebSocket application that allows live viewing of log
   contents. It uses on a tcl-based "tail -f" like command that watches
   certain files (e.g. access.log, or error.log) and reports recent
   changes to the subscribed clients.
@@ -41,13 +50,13 @@ http://next-scripting.org/
 Configuration:
 --------------
 
-In order to configure websockets, add the following lines to the
+In order to configure WebSockets, add the following lines to the
 config file of NaviServer. The section module/websocket/$appname is
 optional and allows to configure the named websocket applications.
 
 When the section module/websocket/$appname is missing, or the "urls"
 parameter is empty, then the application is deactivated.  Via the urls
-parameters, multiple urls can be specified, under which the websocket
+parameters, multiple urls can be specified, under which the WebSocket
 applications are available. This way, one can e.g. define multiple
 chats with different subscriber lists.
 
@@ -75,7 +84,7 @@ Installation:
 Usage:
 ------
 
-The provided websockt API consists of the the following commands:
+The provided WebSocket API consists of the the following commands:
 
     ws::build_msg ?-opcode /value/? /payload/
     ws::decode_msg /channel/ /msg/
@@ -87,7 +96,7 @@ The provided websockt API consists of the the following commands:
     ws::subscribe /channel/ /subscription/
     ws::unsubscribe /channel/ /subscription/
 
-See the example websocket applications for usage patterns.
+See the included example WebSocket applications for usage patterns.
 
 Authors:
 --------
