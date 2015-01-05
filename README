@@ -64,13 +64,18 @@ wide administrators.
 
     ns_section "ns/server/${server}/module/websocket/log-view"
        ns_param urls     /admin/websocket/log-view
-       ns_param refresh  1000   ;# refresh time in milliseconds
+       ns_param refresh  1000   ;# refresh time for file watcher in milliseconds
+
+Installation:
+-------------
+
+    make install
 
 
 Usage:
 ------
 
-The API consists of the the following commands:
+The provided websockt API consists of the the following commands:
 
     ws::build_msg ?-opcode /value/? /payload/
     ws::decode_msg /channel/ /msg/
@@ -82,6 +87,7 @@ The API consists of the the following commands:
     ws::subscribe /channel/ /subscription/
     ws::unsubscribe /channel/ /subscription/
 
+See the example websocket applications for usage patterns.
 
 Authors:
 --------
