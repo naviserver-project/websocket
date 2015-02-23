@@ -9,7 +9,7 @@ Release 0.1
 
 This is a NaviServer module that implements WebSockets for NaviServer
 and provides an API for for it. The WebSockets are integrated in
-NaviServer using the ns_chan command, which will be part version
+NaviServer using the ns_chan command, which are be part version
 4.99.7 of NaviServer.
 
 Connections are established via ws::handshake, which is typically
