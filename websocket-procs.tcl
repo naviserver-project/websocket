@@ -14,7 +14,7 @@ namespace eval ::ws {
         #::ws::log handshake
 
         set h [ns_conn headers]
-        if {[ns_set iget $h upgrade] ne ""} {
+        if {[ns_set iget $h upgrade] eq "websocket"} {
             set key               [ns_set iget $h Sec-WebSocket-Key]
             set client_protocols  [ns_set iget $h Sec-WebSocket-Protocol]
             ::ws::log "key: $key Client Protocols: '$client_protocols'"
