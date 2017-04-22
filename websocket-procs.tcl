@@ -58,7 +58,7 @@ namespace eval ::ws {
     #
     # Callback to be called, when a connchan is becoming readable. The
     # callback might be called as well when a timeout is received
-    # (when 't'), an exception occured (when 'e') or the server exits
+    # (when 't'), an exception occurred (when 'e') or the server exits
     # (when 'x').
     #
     

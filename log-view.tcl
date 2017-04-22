@@ -70,7 +70,7 @@ namespace eval ws::log {
         ns_log notice DETACHED=[ns_info server]
 
         #
-        # Close all files wich are currently nor watched
+        # Close all files which are currently nor watched
         #
         nsf::proc ::ws::log::close_unwatched {watch_files} {
             foreach fn [array names ::watched] {
@@ -83,7 +83,7 @@ namespace eval ws::log {
         }
 
         #
-        # Open all files wich are currently watched
+        # Open all files which are currently watched
         #
         nsf::proc ::ws::log::open_watched {watch_files} {
             foreach fn $watch_files {
