@@ -84,7 +84,7 @@ Installation:
 Usage:
 ------
 
-The provided WebSocket API consists of the the following commands:
+The provided WebSocket API consists of the following commands:
 
     ws::build_msg ?-opcode /value/? /payload/
     ws::decode_msg /channel/ /msg/
