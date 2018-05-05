@@ -27,12 +27,24 @@ namespace eval ::ws {
 
             set guid "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
             set reply [ns_base64encode [binary format H* [ns_sha1 $key$guid]]]
+            #
+            # After the release of 4.99.17, we can use the more general version:
+            # set reply [ns_crypto::md string -digest sha1 -encoding base64 $key$guid]
 
-            ns_write \
-                "HTTP/1.1 101 Switching Protocols\r\n" \
-                "Upgrade: websocket\r\n" \
-                "Connection: Upgrade\r\n" \
-                "Sec-WebSocket-Accept: ${reply}${protocol_line}\r\n\r\n"
+            #
+            # Make sure, to send the upgrade command in a single
+            # sweep, no matter how the server is
+            # configured. Otherwise, we could run into an issue with
+            # the current revproxy.
+            #
+            # In Tcl 8.6, we should use [string cat ...] instead of
+            # the "append" stunt.
+            set _ {}
+            ns_write [append _ \
+                          "HTTP/1.1 101 Switching Protocols\r\n" \
+                          "Upgrade: websocket\r\n" \
+                          "Connection: Upgrade\r\n" \
+                          "Sec-WebSocket-Accept: ${reply}${protocol_line}\r\n\r\n"]
             
             #
             # Unplug the connection channel from the current connection
