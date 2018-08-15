@@ -8,7 +8,7 @@ namespace eval ::ws {
     }
 
     nsf::proc ::ws::handshake {
-        {-readevent:boolean true} 
+        {-readevent:boolean true}
         {-callback ""}
     } {
         #::ws::log handshake
@@ -18,7 +18,7 @@ namespace eval ::ws {
             set key               [ns_set iget $h Sec-WebSocket-Key]
             set client_protocols  [ns_set iget $h Sec-WebSocket-Protocol]
             ::ws::log "key: $key Client Protocols: '$client_protocols'"
-            
+
             if {[llength $client_protocols] > 0} {
                 set protocol_line "\r\nSec-WebSocket-Protocol: [lindex $client_protocols 0]"
             } else {
@@ -45,7 +45,7 @@ namespace eval ::ws {
                           "Upgrade: websocket\r\n" \
                           "Connection: Upgrade\r\n" \
                           "Sec-WebSocket-Accept: ${reply}${protocol_line}\r\n\r\n"]
-            
+
             #
             # Unplug the connection channel from the current connection
             # thread. The currently unplugged channels can be queried via
@@ -73,10 +73,10 @@ namespace eval ::ws {
     # (when 't'), an exception occurred (when 'e') or the server exits
     # (when 'x').
     #
-    
+
     nsf::proc ::ws::readable {
-        channel 
-        callback 
+        channel
+        callback
         when
     } {
         ::ws::log "ws::readable channel $channel callback $callback when $when"
@@ -85,7 +85,7 @@ namespace eval ::ws {
         # result is 0 -> close. Per default, set result to 1 and in
         # terminating cases below to 0.
         set result 1
-        
+
         if {$when ne "r"} {
             ::ws::log "ws::readable channel $channel reveived when <$when>"
             return 0
@@ -96,7 +96,7 @@ namespace eval ::ws {
 
         if {$msg ne ""} {
             ::ws::log "ns_connchan read $channel got [string length $msg] bytes"
-            
+
             lassign [ws::decode_msg $channel $msg] payload rest opcode
             ::ws::log "ws::readable $channel decode -> <$payload> <$rest> <$opcode>"
             #
@@ -132,12 +132,12 @@ namespace eval ::ws {
     set ::ws::OPCODE(close)        1000
     set ::ws::OPCODE(ping)         1001
     set ::ws::OPCODE(pong)         1010
-    
+
     #
-    # build a websocket message
+    # build a WebSocket message
     #
     nsf::proc ::ws::build_msg {
-        {-opcode "text"} 
+        {-opcode "text"}
         payload
     } {
         #::ws::log ws::build_msg
@@ -176,12 +176,12 @@ namespace eval ::ws {
     #
     # Decode message(s) from a client
     #
-    
+
     nsf::proc ::ws::decode_msg {
         channel
         msg
     } {
-        
+
         ::ws::log ws::decode
 
         set b [scan [string index $msg 0] %c]
@@ -199,7 +199,7 @@ namespace eval ::ws {
             set b [scan [string index $msg 1] %c]
 
             set MASK           [expr {($b & 0b11111111) >> 7}]
-            set PAYLOAD_LENGTH [expr {($b & 0b01111111)}]        
+            set PAYLOAD_LENGTH [expr {($b & 0b01111111)}]
 
             #::ws::log "FIN: $FIN, RSVs: $RSV1 $RSV2 $RSV3, Opcode: $OPCODE, Mask: $MASK, Payload_Length: $PAYLOAD_LENGTH"
 
@@ -227,13 +227,13 @@ namespace eval ::ws {
 
             if {$MASK} {
                 set frame_mask   [string range $msg 0 3]
-                set payload      [string range $msg 4 $PAYLOAD_LENGTH+3] 
+                set payload      [string range $msg 4 $PAYLOAD_LENGTH+3]
                 set rest_payload [string range $msg $PAYLOAD_LENGTH+4 end]
                 set unmasked_payload ""
-                
+
                 # scan the 4 bytes of the mask
                 binary scan $frame_mask cccc m(0) m(1) m(2) m(3)
-                
+
                 #::ws::log "mask: $m(0) $m(1) $m(2) $m(3) "
                 for {set i 0} {$i < [string length $payload]} {incr i} {
                     set p [expr {$i % 4}]
@@ -241,8 +241,8 @@ namespace eval ::ws {
                 }
                 set payload [encoding convertfrom identity $unmasked_payload]
             } else {
-                set payload      [string range $msg 0 $PAYLOAD_LENGTH-1] 
-                set rest_payload [string range $msg $PAYLOAD_LENGTH end] 
+                set payload      [string range $msg 0 $PAYLOAD_LENGTH-1]
+                set rest_payload [string range $msg $PAYLOAD_LENGTH end]
             }
         } else {
             ::ws::log "Message: $msg - could not decode"
@@ -271,10 +271,10 @@ namespace eval ::ws {
     }
 
     #
-    # Subscribe to a named websocket channel feed
+    # Subscribe to a named WebSocket channel feed
     #
     nsf::proc ::ws::subscribe {
-        channel 
+        channel
         subscription
     } {
 
@@ -289,10 +289,10 @@ namespace eval ::ws {
     }
 
     #
-    # Cancel a subscription to a named websocket feed
+    # Cancel a subscription to a named WebSocket feed
     #
     nsf::proc ::ws::unsubscribe {
-        channel 
+        channel
         subscription
     } {
         ns_log notice "unsubscribing $channel"
@@ -307,12 +307,12 @@ namespace eval ::ws {
     }
 
     #
-    # Send a websocket message to "all" or to subscribers of a named
+    # Send a WebSocket message to "all" or to subscribers of a named
     # feed. It is expected that msg is already encoded (via ws::build_msg).
     #
     nsf::proc ::ws::multicast {
-        {-exclude ""} 
-        subscription 
+        {-exclude ""}
+        subscription
         msg
     } {
         if {$subscription ne "all"} {
@@ -342,10 +342,10 @@ namespace eval ::ws {
     }
 
     #
-    # Send a websocket message (built by ws::build_msg) to a single client
+    # Send a WebSocket message (built by ws::build_msg) to a single client
     #
     nsf::proc ::ws::send {
-        channel 
+        channel
         msg
     } {
         #::ws::log "ws::send $channel"
@@ -363,7 +363,7 @@ namespace eval ::ws {
     # initialize package
     #
     if {![nsv_exists ws mutex]} {
-        nsv_set ws subscription_mutex  [ns_mutex create]
+        nsv_set ws subscription_mutex [ns_mutex create]
     }
 }
 

@@ -1,7 +1,7 @@
 #
-# Log-view demo application for websockets.
+# Log-view demo application for WebSockets.
 #
-# This demo program shows how to establish a websocket connection and
+# This demo program shows how to establish a WebSocket connection and
 # how to multicast messages. This script is accompanied by log-view.adp,
 # which resides in the same directory as this script.
 #
@@ -10,20 +10,20 @@
 package require nsf
 
 #
-# Get configured urls
+# Get configured URLs
 #
-set urls [ns_config ns/server/[ns_info server]/module/websocket/log-view urls]
+set URLs [ns_config ns/server/[ns_info server]/module/websocket/log-view urls]
 
-if {$urls eq ""} {
-    ns_log notice "websocket: no chat configured"
+if {$URLs eq ""} {
+    ns_log notice "WebSocket: no chat configured"
     return
 }
 
 #
-# Register websocket log-viewer under every configured url
+# Register WebSocket log-viewer under every configured URL
 #
-foreach url $urls {
-    ns_log notice "websocket: log-viewer available under $url"
+foreach url $URLs {
+    ns_log notice "WebSocket: log-viewer available under $url"
     ns_register_adp  GET $url [file dirname [info script]]/log-view.adp
     ns_register_proc GET $url/connect ::ws::log::connect
     ns_register_proc GET $url/set ::ws::log::set_logging
@@ -31,7 +31,7 @@ foreach url $urls {
 
 namespace eval ws::log {
     #
-    # The proc "connect" is called, whenever a new websocket is
+    # The proc "connect" is called, whenever a new WebSocket is
     # established.  Per default, the log-viewer logs the "access.log" of
     # the server. The query parameter "log" can be used to specify
     # other files to be logged, such as e.g. the "error.log". The
@@ -51,7 +51,7 @@ namespace eval ws::log {
     nsf::proc set_logging {} {
         foreach s [ns_logctl severities] {
             set level [ns_queryget $s ""]
-            ns_logctl severity $s [expr {$level eq "" ? false : true}] 
+            ns_logctl severity $s [expr {$level eq "" ? false : true}]
         }
         ns_return 200 text/plain ""
     }
@@ -126,14 +126,14 @@ namespace eval ws::log {
 
         #
         # For every watched file, report changes via multicast
-        #        
+        #
         if {[catch {
             while {1} {
                 set watch_files [nsv_get watch files]
                 ws::log::close_unwatched $watch_files
                 ws::log::open_watched $watch_files
                 ws::log::report_updates
-                after [ns_config ns/server/[ns_info server]/module/websocket/log-view refresh 1000] 
+                after [ns_config ns/server/[ns_info server]/module/websocket/log-view refresh 1000]
 
             }
         } errorMsg]} {
@@ -148,4 +148,3 @@ namespace eval ws::log {
 #    tcl-indent-level: 4
 #    indent-tabs-mode: nil
 # End:
-
