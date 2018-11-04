@@ -137,7 +137,7 @@ namespace eval ws::log {
 
             }
         } errorMsg]} {
-            ns_log error "file watcher returned $errorMsg"
+            ns_log warning "file watcher returned $errorMsg"
         }
     }
 }
