@@ -26,10 +26,12 @@ namespace eval ::ws {
             }
 
             set guid "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-            set reply [ns_base64encode [binary format H* [ns_sha1 $key$guid]]]
             #
-            # After the release of 4.99.17, we can use the more general version:
-            # set reply [ns_crypto::md string -digest sha1 -encoding base64 $key$guid]
+            # Before the release of 4.99.17, we used:
+            #
+            #set reply [ns_base64encode [binary format H* [ns_sha1 $key$guid]]]
+
+            set reply [ns_crypto::md string -digest sha1 -encoding base64 $key$guid]
 
             #
             # Make sure, to send the upgrade command in a single
@@ -239,7 +241,7 @@ namespace eval ::ws {
                     set p [expr {$i % 4}]
                     append unmasked_payload [format %c [expr {[scan [string index $payload $i] %c] ^ ($m($p) & 255) }]]
                 }
-                set payload [encoding convertfrom identity $unmasked_payload]
+                set payload [encoding convertfrom utf-8 $unmasked_payload]
             } else {
                 set payload      [string range $msg 0 $PAYLOAD_LENGTH-1]
                 set rest_payload [string range $msg $PAYLOAD_LENGTH end]
