@@ -15,7 +15,7 @@ package require nsf
 set URLs [ns_config ns/server/[ns_info server]/module/websocket/log-view urls]
 
 if {$URLs eq ""} {
-    ns_log notice "WebSocket: no chat configured"
+    ns_log notice "WebSocket: no log-view configured ([info script])"
     return
 }
 
