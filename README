@@ -8,7 +8,7 @@ Release 0.1
     wolfgang.winkler@digital-concepts.com
 
 This is a NaviServer module that implements WebSockets for NaviServer
-and provides an API for for it. The WebSockets are integrated in
+and provides an API for it. The WebSockets are integrated in
 NaviServer using the ns_chan command, which are be part version
 4.99.7 of NaviServer.
 
@@ -52,7 +52,7 @@ Configuration:
 
 In order to configure WebSockets, add the following lines to the
 config file of NaviServer. The section module/websocket/$appname is
-optional and allows to configure the named websocket applications.
+optional and allows one to configure the named websocket applications.
 
 When the section module/websocket/$appname is missing, or the "urls"
 parameter is empty, then the application is deactivated.  Via the urls
