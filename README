@@ -65,15 +65,17 @@ careful when registering it on public sites. In the example below, we
 provide it under "/admin/", which is restricted for OpenACS to site
 wide administrators.
 
-    ns_section "ns/server/${server}/modules"
+    ns_section "ns/server/${server}/modules" {
        ns_param websocket tcl
-
-    ns_section "ns/server/${server}/module/websocket/chat"
+    }
+    ns_section "ns/server/${server}/module/websocket/chat" {
        ns_param urls     /websocket/chat
-
-    ns_section "ns/server/${server}/module/websocket/log-view"
+    }
+    ns_section "ns/server/${server}/module/websocket/log-view" {
        ns_param urls     /admin/websocket/log-view
        ns_param refresh  1000   ;# refresh time for file watcher in milliseconds
+    }
+
 
 Installation:
 -------------
@@ -84,7 +86,7 @@ Installation:
 Usage:
 ------
 
-The provided WebSocket API consists of the following commands:
+The provided WebSocket server API consists of the following commands:
 
     ws::build_msg ?-opcode /value/? /payload/
     ws::decode_msg /channel/ /msg/
@@ -96,7 +98,14 @@ The provided WebSocket API consists of the following commands:
     ws::subscribe /channel/ /subscription/
     ws::unsubscribe /channel/ /subscription/
 
-See the included example WebSocket applications for usage patterns.
+The provided WebSocket client API consists of the following commands:
+
+    ws::client::open /websocketurl/
+    ws::client::send /channel/ /textmessage/
+    ws::client::receive /channel/
+    ws::client::close /channel/
+
+See the included example WebSocket server applications for usage patterns.
 
 Authors:
 --------

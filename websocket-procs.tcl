@@ -121,6 +121,9 @@ namespace eval ::ws {
         return $result
     }
 
+
+
+
     #
     # Set a few constants used for encoding messages
     #
@@ -140,9 +143,23 @@ namespace eval ::ws {
     #
     nsf::proc ::ws::build_msg {
         {-opcode "text"}
+        {-mask:switch}
         payload
     } {
         #::ws::log ws::build_msg
+
+        #
+        # Produce a single-frame unmasked text message
+        #
+        # set buf [::ws::build_msg "Hello"]
+        # binary encode hex $buf
+        #    81   05   48   65   6c   6c   6f
+        #  0x81 0x05 0x48 0x65 0x6c 0x6c 0x6f (contains "Hello")
+        #
+        # A single-frame masked text message
+        #
+        #  0x81 0x85 0x37 0xfa 0x21 0x3d 0x7f 0x9f 0x4d 0x51 0x58
+        #    81   85   37   fa   21   3d   7f   9f   4d   51   58
 
         set OPCODE $::ws::OPCODE($opcode)
         set payload [encoding convertto utf-8 $payload]
@@ -152,15 +169,28 @@ namespace eval ::ws {
         set payload_length [string length $payload]
 
         if {$payload_length <= 125} {
-            append msg [format %c $payload_length]
+            if {$mask} {
+                append msg [format %c [expr {0x80 | $payload_length}]]
+            } else {
+                append msg [format %c $payload_length]
+            }
         } elseif {$payload_length <= 0xFFFF} {
             # 126 -> the next 2 bytes give the payload length
-            append msg [format %c 126]
+            if {$mask} {
+                append msg [format %c 254]
+            } else {
+                append msg [format %c 126]
+            }
             append msg [format %c [expr {$payload_length >> 8}]]
             append msg [format %c [expr {($payload_length & 0x00FF) >> 0}]]
         } else {
             # 127 -> the next 8 bytes give the payload length
-            append msg [format %c 127]
+            if {$mask} {
+                append msg [format %c 255]
+            } else {
+                append msg [format %c 127]
+
+            }
             append msg [format %c [expr {($payload_length & 0xFFFFFFFFFFFFFFFF) >> 56}]]
             append msg [format %c [expr {($payload_length & 0x00FFFFFFFFFFFFFF) >> 48}]]
             append msg [format %c [expr {($payload_length & 0x0000FFFFFFFFFFFF) >> 40}]]
@@ -170,9 +200,33 @@ namespace eval ::ws {
             append msg [format %c [expr {($payload_length & 0x000000000000FFFF) >>  8}]]
             append msg [format %c [expr {($payload_length & 0x00000000000000FF) >>  0}]]
         }
-        append msg $payload
+        if {$mask} {
+            #set frame_mask [binary decode hex 37fa213d]
+            set frame_mask [ns_crypto::randombytes -encoding binary 4]
+            set payload    [::ws::mask $frame_mask $payload]
+            append msg $frame_mask $payload
+        } else {
+            append msg $payload
+        }
 
         return $msg
+    }
+
+    nsf::proc ::ws::mask {
+        frame_mask
+        payload
+    } {
+        set unmasked_payload ""
+
+        # scan the 4 bytes of the mask
+        binary scan $frame_mask cccc m(0) m(1) m(2) m(3)
+
+        #::ws::log "mask: $m(0) $m(1) $m(2) $m(3) "
+        for {set i 0} {$i < [string length $payload]} {incr i} {
+            set p [expr {$i % 4}]
+            append unmasked_payload [format %c [expr {[scan [string index $payload $i] %c] ^ ($m($p) & 255) }]]
+        }
+        set payload [encoding convertfrom utf-8 $unmasked_payload]
     }
 
     #
@@ -198,10 +252,9 @@ namespace eval ::ws {
             set OPCODE         [expr {($b & 0b00001111)}]
 
             # ------- SECOND BYTE --------------
-            set b [scan [string index $msg 1] %c]
-
-            set MASK           [expr {($b & 0b11111111) >> 7}]
-            set PAYLOAD_LENGTH [expr {($b & 0b01111111)}]
+            set byte2          [scan [string index $msg 1] %c]
+            set MASK           [expr {($byte2 & 0b11111111) >> 7}]
+            set PAYLOAD_LENGTH [expr {($byte2 & 0b01111111)}]
 
             #::ws::log "FIN: $FIN, RSVs: $RSV1 $RSV2 $RSV3, Opcode: $OPCODE, Mask: $MASK, Payload_Length: $PAYLOAD_LENGTH"
 
@@ -231,17 +284,7 @@ namespace eval ::ws {
                 set frame_mask   [string range $msg 0 3]
                 set payload      [string range $msg 4 $PAYLOAD_LENGTH+3]
                 set rest_payload [string range $msg $PAYLOAD_LENGTH+4 end]
-                set unmasked_payload ""
-
-                # scan the 4 bytes of the mask
-                binary scan $frame_mask cccc m(0) m(1) m(2) m(3)
-
-                #::ws::log "mask: $m(0) $m(1) $m(2) $m(3) "
-                for {set i 0} {$i < [string length $payload]} {incr i} {
-                    set p [expr {$i % 4}]
-                    append unmasked_payload [format %c [expr {[scan [string index $payload $i] %c] ^ ($m($p) & 255) }]]
-                }
-                set payload [encoding convertfrom utf-8 $unmasked_payload]
+                set payload      [::ws::mask $frame_mask $payload]
             } else {
                 set payload      [string range $msg 0 $PAYLOAD_LENGTH-1]
                 set rest_payload [string range $msg $PAYLOAD_LENGTH end]
@@ -366,6 +409,75 @@ namespace eval ::ws {
     #
     if {![nsv_exists ws mutex]} {
         nsv_set ws subscription_mutex [ns_mutex create]
+    }
+}
+
+namespace eval ::ws::client {
+    #
+    # Simple WebSocket client implementation
+    #
+    nsf::proc ::ws::client::open {url} {
+        set d [ns_parseurl $url]
+        set host [dict get $d host]
+        set proto [expr {[dict get $d proto] eq "ws"
+                         ? "http"
+                         : [dict get $d proto] eq "wss"
+                         ? "https"
+                         : "unknown"}]
+        if {$proto eq "unknown"} {
+            error "protocol must be ws:// or wss://"
+        }
+        set location ${proto}://$host
+        if {[dict exists $d port]} {
+            append location :[dict get $d port]
+            append host :[dict get $d port]
+        }
+        set request_url $location
+        if {[dict get $d path] ne ""} {
+            append request_url /$path
+        }
+        if {[dict get $d tail] ne ""} {
+            append request_url /$tail
+        }
+
+        set nonce [ns_crypto::randombytes -encoding base64 16]
+        set headers [ns_set create headers \
+                         Host $host \
+                         Upgrade websocket \
+                         Connection Upgrade \
+                         Origin $location \
+                         Sec-WebSocket-Key $nonce \
+                         Sec-WebSocket-Version 13]
+        set chan [ns_connchan open -headers $headers -version 1.1 $request_url]
+
+        set replyMsg [ns_connchan read $chan]
+        set firstline 1
+        set reply [ns_set create reply]
+        foreach line [split $replyMsg \n] {
+            set line [string trimright $line]
+            if {$line eq ""} continue
+            if {$firstline} {
+                set firstline 0
+                ns_set put $reply :status [lindex $line 1]
+                continue
+            }
+            #ns_log notice "<$line>"
+            ns_parseheader $reply $line
+        }
+        if {[ns_set get $reply :status] ne 101} {
+            error "ws::client::open returned unexpected status code [ns_set get $reply :status]"
+        }
+        return $chan
+    }
+
+    nsf::proc ::ws::client::send {chan msg} {
+        ns_connchan write $chan [::ws::build_msg -mask $msg]
+    }
+    nsf::proc ::ws::client::receive {chan} {
+        ::ws::decode_msg $chan [ns_connchan read $chan]
+    }
+    nsf::proc ::ws::client::close {chan} {
+        ns_connchan close $chan
     }
 }
 

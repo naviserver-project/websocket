@@ -35,7 +35,7 @@ namespace eval ws::log {
     # established.  Per default, the log-viewer logs the "access.log" of
     # the server. The query parameter "log" can be used to specify
     # other files to be logged, such as e.g. the "error.log". The
-    # logfile name is used as channel names for broadcasting to
+    # logfilename is used as channel names for broadcasting to
     # multiple potential subscribers.
     #
     nsf::proc connect {} {
@@ -63,7 +63,7 @@ namespace eval ws::log {
         #
         # The global state of the currently watched files is
         # maintained in the associative array "watched". The keys are
-        # the file names, the values are file handles.
+        # the filenames, the values are file handles.
         #
         array set ::watched {}
 
