@@ -292,7 +292,7 @@ namespace eval ::ws {
         } else {
             error "::ws::decode_msg: could not decode: '[binary encode hex $msg]'"
         }
-        #::ws::log "FINAL WS PAYLOAD: $payload"
+        #::ws::log "opcode $OPCODE, mask $MASK payload length $PAYLOAD_LENGTH <$payload>"
 
         if {$FIN == 0 && ($OPCODE == 0 || $OPCODE == 1 || $OPCODE == 2) } {
             #
@@ -478,7 +478,13 @@ namespace eval ::ws::client {
         ns_connchan write $chan [::ws::build_msg -mask $msg]
     }
     nsf::proc ::ws::client::receive {chan} {
-        ::ws::decode_msg $chan [ns_connchan read $chan]
+        lassign [::ws::decode_msg $chan [ns_connchan read $chan]] replyText reminder opcode
+        switch $opcode {
+            1 { set replyText [encoding convertfrom utf-8 $replyText]}
+            2 {}
+            default { ns_log notice "no special handling of opcode $opcode"}
+        }
+        return $replyText
     }
     nsf::proc ::ws::client::close {chan} {
         ns_connchan close $chan
