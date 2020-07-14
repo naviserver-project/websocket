@@ -238,7 +238,7 @@ namespace eval ::ws {
         msg
     } {
 
-        ::ws::log ws::decode
+        ::ws::log "ws::decode [string length $msg] bytes"
 
         set b [scan [string index $msg 0] %c]
         if {$b ne ""} {
@@ -290,7 +290,7 @@ namespace eval ::ws {
                 set rest_payload [string range $msg $PAYLOAD_LENGTH end]
             }
         } else {
-            ::ws::log "Message: $msg - could not decode"
+            error "::ws::decode_msg: could not decode: '[binary encode hex $msg]'"
         }
         #::ws::log "FINAL WS PAYLOAD: $payload"
 
@@ -434,10 +434,10 @@ namespace eval ::ws::client {
         }
         set request_url $location
         if {[dict get $d path] ne ""} {
-            append request_url /$path
+            append request_url /[dict get $d path]
         }
         if {[dict get $d tail] ne ""} {
-            append request_url /$tail
+            append request_url /[dict get $d tail]
         }
 
         set nonce [ns_crypto::randombytes -encoding base64 16]
@@ -445,14 +445,17 @@ namespace eval ::ws::client {
                          Host $host \
                          Upgrade websocket \
                          Connection Upgrade \
+                         Cache-Control no-cache \
                          Origin $location \
                          Sec-WebSocket-Key $nonce \
                          Sec-WebSocket-Version 13]
-        set chan [ns_connchan open -headers $headers -version 1.1 $request_url]
-
+        ::ws::log [list ns_connchan open -headers $headers -version 1.1 -hostname $host $request_url]
+        set chan [ns_connchan open -headers $headers -version 1.1 -hostname $host $request_url]
         set replyMsg [ns_connchan read $chan]
+
         set firstline 1
         set reply [ns_set create reply]
+
         foreach line [split $replyMsg \n] {
             set line [string trimright $line]
             if {$line eq ""} continue
@@ -465,6 +468,7 @@ namespace eval ::ws::client {
             ns_parseheader $reply $line
         }
         if {[ns_set get $reply :status] ne 101} {
+            ns_log Warning "reply: [ns_set array $reply]"
             error "ws::client::open returned unexpected status code [ns_set get $reply :status]"
         }
         return $chan
