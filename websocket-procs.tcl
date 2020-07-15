@@ -100,7 +100,8 @@ namespace eval ::ws {
             ::ws::log "ns_connchan read $channel got [string length $msg] bytes"
 
             lassign [ws::decode_msg $channel $msg] payload rest opcode
-            ::ws::log "ws::readable $channel decode -> <$payload> <$rest> <$opcode>"
+            ::ws::log "ws::readable $channel decode -> <[string range $payload 0 10]...> <$rest> <$opcode>"
+
             #
             # opcodes: 0 continuation, 1 text, 2 binary, 3-7 reserved,
             # 8 close, 9 ping, 10 pong, 11-15 reserved
@@ -226,7 +227,8 @@ namespace eval ::ws {
             set p [expr {$i % 4}]
             append unmasked_payload [format %c [expr {[scan [string index $payload $i] %c] ^ ($m($p) & 255) }]]
         }
-        set payload [encoding convertfrom utf-8 $unmasked_payload]
+        #set payload [encoding convertfrom utf-8 $unmasked_payload]
+        return $unmasked_payload
     }
 
     #
@@ -278,13 +280,43 @@ namespace eval ::ws {
                 }
                 set msg [string range $msg 10 end]
             }
-            #::ws::log "Payload Length $channel: $PAYLOAD_LENGTH length msg [string length $msg]"
+            if {$MASK} {
+                set frame_mask [string range $msg 0 3]
+                set msg [string range $msg 4 end]
+            } else {
+                set mask_length 0
+            }
+
+            #
+            # The following loop is suboptimal, but an improvement to
+            # the previous state. In case the frame of the client is
+            # larger than 16KB, the package will be transmitted (at
+            # least via TLS) in multiple chunks. Previous versions did
+            # not handle this case at all. So, when the PAYLOAD_LENGTH
+            # is larger than the reveived message, we read in a busy
+            # loop until the frame is complete (or the transmission
+            # runs into an error). In general, it would be better to
+            # switch to a different callback handling the reading of
+            # the remaining bytes for this channel (without
+            # potentially blocking other transmissions).
+            #
+            while {$PAYLOAD_LENGTH > [string length $msg]} {
+                ::ws::log "partial payload length $channel: $PAYLOAD_LENGTH length msg [string length $msg]"
+                set diff [expr {$PAYLOAD_LENGTH - [string length $msg]}]
+                ::ws::log ".... missing payload: $diff bytes"
+                set chunk [ns_connchan read $channel]
+                ::ws::log "..... received [string length $chunk]"
+                if {[string length $msg] == 0} {
+                    ::ws::log "..... connchan read returned empty (maybe of on channel $chan)"
+                    break
+                }
+                append msg $chunk
+            }
+            ::ws::log "payload length $channel: $PAYLOAD_LENGTH length msg [string length $msg]"
 
             if {$MASK} {
-                set frame_mask   [string range $msg 0 3]
-                set payload      [string range $msg 4 $PAYLOAD_LENGTH+3]
-                set rest_payload [string range $msg $PAYLOAD_LENGTH+4 end]
-                set payload      [::ws::mask $frame_mask $payload]
+                set rest_payload [string range $msg $PAYLOAD_LENGTH end]
+                set payload      [::ws::mask $frame_mask $msg]
             } else {
                 set payload      [string range $msg 0 $PAYLOAD_LENGTH-1]
                 set rest_payload [string range $msg $PAYLOAD_LENGTH end]
@@ -310,6 +342,10 @@ namespace eval ::ws {
             #
             set payload [nsv_get ws "fragments-$channel"]$payload
             nsv_unset "fragments-$channel"
+        }
+
+        if {$OPCODE == 1} {
+            set payload [encoding convertfrom utf-8 $payload]
         }
 
         return [list $payload $rest_payload $OPCODE]
@@ -477,6 +513,7 @@ namespace eval ::ws::client {
     nsf::proc ::ws::client::send {chan msg} {
         ns_connchan write $chan [::ws::build_msg -mask $msg]
     }
+
     nsf::proc ::ws::client::receive {chan} {
         lassign [::ws::decode_msg $chan [ns_connchan read $chan]] replyText reminder opcode
         switch $opcode {
@@ -486,6 +523,7 @@ namespace eval ::ws::client {
         }
         return $replyText
     }
+
     nsf::proc ::ws::client::close {chan} {
         ns_connchan close $chan
     }
