@@ -99,20 +99,28 @@ namespace eval ::ws {
         if {$msg ne ""} {
             ::ws::log "ns_connchan read $channel got [string length $msg] bytes"
 
-            lassign [ws::decode_msg $channel $msg] payload rest opcode
-            ::ws::log "ws::readable $channel decode -> <[string range $payload 0 10]...> <$rest> <$opcode>"
+            while {1} {
+                lassign [ws::decode_msg $channel $msg] payload rest opcode
+                ::ws::log "ws::readable $channel decode -> <[string range $payload 0 10]...> <$rest> <$opcode>"
 
-            #
-            # opcodes: 0 continuation, 1 text, 2 binary, 3-7 reserved,
-            # 8 close, 9 ping, 10 pong, 11-15 reserved
-            #
-            switch $opcode {
-                0 -
-                1 -
-                2 { if {$callback ne ""} { {*}$callback $channel $payload } }
-                8 { set result 0 }
-                9 { ws::send $channel [ws::build_msg -opcode pong "PONG"] }
-                default { }
+                #
+                # opcodes: 0 continuation, 1 text, 2 binary, 3-7 reserved,
+                # 8 close, 9 ping, 10 pong, 11-15 reserved
+                #
+                switch $opcode {
+                    0 -
+                    1 -
+                    2 { if {$callback ne ""} { {*}$callback $channel $payload } }
+                    8 { set result 0 }
+                    9 { ws::send $channel [ws::build_msg -opcode pong "PONG"] }
+                    default { }
+                }
+                if {[string length $rest] > 0} {
+                    ::ws::log "... processing rest [string length $rest] bytes"
+                    set msg $rest
+                    continue
+                }
+                break
             }
         } else {
             ::ws::log "ws::readable on $channel got 0 bytes"
@@ -312,7 +320,6 @@ namespace eval ::ws {
                 }
                 append msg $chunk
             }
-            ::ws::log "payload length $channel: $PAYLOAD_LENGTH length msg [string length $msg]"
 
             if {$MASK} {
                 set rest_payload [string range $msg $PAYLOAD_LENGTH end]
@@ -321,6 +328,9 @@ namespace eval ::ws {
                 set payload      [string range $msg 0 $PAYLOAD_LENGTH-1]
                 set rest_payload [string range $msg $PAYLOAD_LENGTH end]
             }
+
+            ::ws::log "payload length $channel: $PAYLOAD_LENGTH length msg [string length $msg]\
+                       (rest [string length $rest_payload] bytes)"
         } else {
             error "::ws::decode_msg: could not decode: '[binary encode hex $msg]'"
         }
