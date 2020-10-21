@@ -321,12 +321,11 @@ namespace eval ::ws {
                 append msg $chunk
             }
 
+            set payload      [string range $msg 0 $PAYLOAD_LENGTH-1]
+            set rest_payload [string range $msg $PAYLOAD_LENGTH end]
+
             if {$MASK} {
-                set rest_payload [string range $msg $PAYLOAD_LENGTH end]
-                set payload      [::ws::mask $frame_mask $msg]
-            } else {
-                set payload      [string range $msg 0 $PAYLOAD_LENGTH-1]
-                set rest_payload [string range $msg $PAYLOAD_LENGTH end]
+                set payload [::ws::mask $frame_mask $payload]
             }
 
             ::ws::log "payload length $channel: $PAYLOAD_LENGTH length msg [string length $msg]\
