@@ -453,7 +453,7 @@ namespace eval ::ws {
     # initialize package
     #
     if {![nsv_exists ws mutex]} {
-        nsv_set ws subscription_mutex [ns_mutex create]
+        nsv_set ws subscription_mutex [ns_mutex create websocket-subscription]
     }
 }
 
