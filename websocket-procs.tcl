@@ -250,8 +250,9 @@ namespace eval ::ws {
 
         ::ws::log "ws::decode [string length $msg] bytes"
 
-        set b [scan [string index $msg 0] %c]
-        if {$b ne ""} {
+        set b     [scan [string index $msg 0] %c]
+        set byte2 [scan [string index $msg 1] %c]
+        if {$b ne "" && $byte2 ne ""} {
             # ------- FIRST BYTE --------------
             # first byte is FIN + RSV[1-3] + Opcode
             set FIN            [expr {($b & 0b11111111) >> 7}]
@@ -262,7 +263,6 @@ namespace eval ::ws {
             set OPCODE         [expr {($b & 0b00001111)}]
 
             # ------- SECOND BYTE --------------
-            set byte2          [scan [string index $msg 1] %c]
             set MASK           [expr {($byte2 & 0b11111111) >> 7}]
             set PAYLOAD_LENGTH [expr {($byte2 & 0b01111111)}]
 
@@ -315,7 +315,7 @@ namespace eval ::ws {
                 set chunk [ns_connchan read $channel]
                 ::ws::log "..... received [string length $chunk]"
                 if {[string length $msg] == 0} {
-                    ::ws::log "..... connchan read returned empty (maybe of on channel $chan)"
+                    ::ws::log "..... connchan read returned empty (channel $channel)"
                     break
                 }
                 append msg $chunk
@@ -349,8 +349,7 @@ namespace eval ::ws {
             # continuation frame append this payload to the message
             # and return it.
             #
-            set payload [nsv_get ws "fragments-$channel"]$payload
-            nsv_unset "fragments-$channel"
+            set payload [nsv_set -reset ws "fragments-$channel" ""]$payload
         }
 
         if {$OPCODE == 1} {
