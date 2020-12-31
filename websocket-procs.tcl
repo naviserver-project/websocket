@@ -1,10 +1,41 @@
+#
+# WebSocket implementation based on NaviServer's ns_connchan with
+# internal buffering.
+#
 package require nsf
 ns_logctl severity Debug(ws) false
 
+#
+# For more intense debugging, you might activate (some) the following
+# debug levels.
+#
+
+#ns_logctl severity Debug(ws) true
+#ns_logctl severity Debug(connchan) true
+
+#
+# Activate/Deactivate a simple WebSocket echo service (e.g. for testing)
+#
+namespace eval ::ws {}
+set ::ws::echo_service 1
+
+#
+# Make sure that we have a sufficiently recent version of
+# NaviServer. Otherwise bail out with an exception.
+#
+catch {ns_connchan read "" ""} errorMsg
+if {![string match "*-websocket*" $errorMsg]} {
+    error "Please upgrade to a newer version of NaviServer"
+}
+
 namespace eval ::ws {
 
-    nsf::proc ::ws::log {msg} {
-        ns_log Debug(ws) $msg
+    nsf::proc ::ws::log {args} {
+        #
+        # Support single and multi argument log messages (like
+        # "ns_log").
+        #
+        ns_log Debug(ws) {*}$args
     }
 
     nsf::proc ::ws::handshake {
@@ -26,17 +57,12 @@ namespace eval ::ws {
             }
 
             set guid "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-            #
-            # Before the release of 4.99.17, we used:
-            #
-            #set reply [ns_base64encode [binary format H* [ns_sha1 $key$guid]]]
-
             set reply [ns_crypto::md string -digest sha1 -encoding base64 $key$guid]
 
             #
-            # Make sure, to send the upgrade command in a single
-            # sweep, no matter how the server is
-            # configured. Otherwise, we could run into an issue with
+            # Make sure, to send the upgrade command in a single sweep
+            # (single send buffer), no matter how the server is
+            # configured.  Otherwise, we could run into an issue with
             # the current revproxy.
             #
             # In Tcl 8.6, we should use [string cat ...] instead of
@@ -47,7 +73,6 @@ namespace eval ::ws {
                           "Upgrade: websocket\r\n" \
                           "Connection: Upgrade\r\n" \
                           "Sec-WebSocket-Accept: ${reply}${protocol_line}\r\n\r\n"]
-
             #
             # Unplug the connection channel from the current connection
             # thread. The currently unplugged channels can be queried via
@@ -58,7 +83,7 @@ namespace eval ::ws {
             # event based reading
             if {$readevent} {
                 # register a callback to be executed when the channel is readable
-                ns_connchan callback $handle [list ws::readable $handle $callback] r
+                ns_connchan callback $handle [list ws::io $handle $callback] rex
             }
 
             return $handle
@@ -69,298 +94,208 @@ namespace eval ::ws {
         }
     }
 
+    nsf::proc ::ws::receive_msg {channel} {
+        while {1} {
+
+            try {
+                ns_connchan read -websocket $channel
+            } trap {POSIX ECONNRESET} {} {
+                #
+                # The other side has closed the connection. Don't
+                # complain and perform standard cleanup.
+                #
+                ns_log warning "ws::receive_msg: peer has reset connection on $channel"
+                dict set d continue 0
+                break
+
+            } on error {errorMsg} {
+                ns_log error "ws::receive_msg error on $channel: $errorMsg ($::errorCode)"
+                dict set d continue 0
+                break
+
+            } on ok {d} {
+            }
+            #ns_log notice "GOT <$d>"
+
+            if {[dict exists $d payload]} {
+                #
+                # The dictionary contains "payload" only when also the
+                # "fin" bit of the frame was set. Since we got some
+                # data, receive_msg can report it back.
+                #
+                if {[dict get $d opcode] == 1} {
+                    dict set d payload [encoding convertfrom utf-8 [dict get $d payload]]
+                }
+                dict set d continue 1
+                break
+
+            } elseif {[dict get $d bytes] < 0} {
+                #
+                # There must have been an error condition.
+                #
+                ::ws::log "ws::receive_msg on $channel got [dict get $d bytes] bytes"
+                dict set d continue 0
+                break
+
+            } elseif {[dict get $d bytes] == 0 && ![dict get $d havedata]} {
+                #
+                # We got no fresh data, but maybe we have still some
+                # more unprocessed either in the frame buffer or in
+                # the segments buffer.
+                #
+                ::ws::log "ws::receive_msg on $channel: check unprocessed $d"
+                set unprocessed [dict get $d unprocessed]
+                incr unprocessed [dict get $d fragments]
+                dict set d continue [expr {$unprocessed > 0}]
+                ns_log warning "ws::receive_msg on $channel should stop?" \
+                    " $d unprocessed $unprocessed -> [dict get $d continue]"
+
+            } elseif {[dict exists $d fin]
+                      && [dict get $d fin] == 0
+                      && [dict get $d frame] eq "complete"
+                  } {
+                #
+                # The frame is complete, but not final, we have to
+                # continue.
+                #
+                dict set d continue 1
+
+            } elseif {[dict get $d bytes] > 0
+                      && [dict get $d frame] eq "incomplete"
+                      && [dict get $d unprocessed] > 0
+                      && ![dict get $d havedata]
+                  } {
+                #
+                # We got some data, but the data is not sufficient
+                # to process the frame.  So, we need more data to
+                # fill up this frame.
+                #
+                ns_log warning "ws::receive_msg need more data <$d>"
+                dict set d continue 1
+
+            } else {
+                #
+                # There might be potentially more cases requiring
+                # special handling, but for the time being, we
+                # continue.
+                #
+                ns_log warning "ws::receive_msg essentially unhandled case <$d>"
+                dict set d continue 1
+            }
+
+            if {![dict get $d havedata]} {
+                break
+            }
+        }
+        ::ws::log "ws::revceive_msg returns $d"
+        return $d
+    }
+
     #
-    # Callback to be called, when a connchan is becoming readable. The
-    # callback might be called as well when a timeout is received
-    # (when 't'), an exception occurred (when 'e') or the server exits
-    # (when 'x').
+    # ::ws::io is the callback for readable or writable conditions
+    # (and for handling timeouts or errors). The handlers switching
+    # between readable and writable conditions whenever an output
+    # channel is saturated. In readmode (default) it reads data, when
+    # the channel is readable, in write mode the handler is delivering
+    # data on the channel whenever it is writable. This is necessary
+    # to handle partial write operations in an event driven fashion.
     #
 
-    nsf::proc ::ws::readable {
+    nsf::proc ::ws::io {
         channel
         callback
         when
     } {
-        ::ws::log "ws::readable channel $channel callback $callback when $when"
-
-        # When the result is 1, so the event will fire again; when the
-        # result is 0 -> close. Per default, set result to 1 and in
-        # terminating cases below to 0.
-        set result 1
-
-        if {$when ne "r"} {
-            ::ws::log "ws::readable channel $channel reveived when <$when>"
-            return 0
+        ::ws::log "ws::io channel $channel callback $callback when $when"
+        switch $when {
+            r {
+                return [::ws::io_readable $channel $callback $when]
+            }
+            w {
+                return [::ws::io_writable $channel $callback $when]
+            }
+            default {
+                ::ws::log "ws::io channel $channel received when <$when>"
+                return 0
+            }
         }
+    }
 
-        set msg [ns_connchan read $channel]
-        ::ws::log "ns_connchan read $channel got [string length $msg] bytes"
+    nsf::proc ::ws::io_readable {
+        channel
+        callback
+        when
+    } {
+        #
+        # When continue is 1, the event will fire again; when continue
+        # is 0 channel will be closed.  A continue of 2 means cancel
+        # the callback, but don't close the channel.  Per default, set
+        # continue to 1 and in terminating cases to 0.
+        #
+        set continue 1
 
-        if {$msg ne ""} {
-            ::ws::log "ns_connchan read $channel got [string length $msg] bytes"
-
-            while {1} {
-                lassign [ws::decode_msg $channel $msg] payload rest opcode
-                ::ws::log "ws::readable $channel decode -> <[string range $payload 0 10]...> <$rest> <$opcode>"
-
-                #
-                # opcodes: 0 continuation, 1 text, 2 binary, 3-7 reserved,
-                # 8 close, 9 ping, 10 pong, 11-15 reserved
-                #
-                switch $opcode {
-                    0 -
+        #
+        # One physical read operation from the channel might contain
+        # multiple messages. In these cases, the dict member
+        # "havedata" is set, and we can try to get further messages
+        # from the receive buffer contained in the connection channel.
+        #
+        while {$continue} {
+            set d [::ws::receive_msg $channel]
+            set continue [dict get $d continue]
+            if {$continue && [dict exists $d payload]} {
+                switch [dict get $d opcode] {
                     1 -
-                    2 { if {$callback ne ""} { {*}$callback $channel $payload } }
-                    8 { set result 0 }
-                    9 { ws::send $channel [ws::build_msg -opcode pong "PONG"] }
+                    2 { if {$callback ne ""} { {*}$callback $channel [dict get $d payload] }}
+                    8 { set continue 0 }
+                    9 { ws::send $channel [ns_connchan wsframe -opcode pong "PONG"] }
                     default { }
                 }
-                if {[string length $rest] > 0} {
-                    ::ws::log "... processing rest [string length $rest] bytes"
-                    set msg $rest
-                    continue
-                }
+            }
+            if {![dict get $d havedata]} {
                 break
             }
-        } else {
-            ::ws::log "ws::readable on $channel got 0 bytes"
-            set result 0
         }
 
-        return $result
+        log "ws::io_readable returns $continue (channel $channel)"
+        return $continue
     }
 
-
-
-
-    #
-    # Set a few constants used for encoding messages
-    #
-    set ::ws::FIN 1
-    set ::ws::RSV1 0
-    set ::ws::RSV2 0
-    set ::ws::RSV3 0
-    set ::ws::OPCODE(continuation) 0000
-    set ::ws::OPCODE(text)         0001
-    set ::ws::OPCODE(binary)       0010
-    set ::ws::OPCODE(close)        1000
-    set ::ws::OPCODE(ping)         1001
-    set ::ws::OPCODE(pong)         1010
-
-    #
-    # build a WebSocket message
-    #
-    nsf::proc ::ws::build_msg {
-        {-opcode "text"}
-        {-mask:switch}
-        payload
-    } {
-        #::ws::log ws::build_msg
-
-        #
-        # Produce a single-frame unmasked text message
-        #
-        # set buf [::ws::build_msg "Hello"]
-        # binary encode hex $buf
-        #    81   05   48   65   6c   6c   6f
-        #  0x81 0x05 0x48 0x65 0x6c 0x6c 0x6f (contains "Hello")
-        #
-        # A single-frame masked text message
-        #
-        #  0x81 0x85 0x37 0xfa 0x21 0x3d 0x7f 0x9f 0x4d 0x51 0x58
-        #    81   85   37   fa   21   3d   7f   9f   4d   51   58
-
-        set OPCODE $::ws::OPCODE($opcode)
-        set payload [encoding convertto utf-8 $payload]
-        set msg [binary format B8 $::ws::FIN$::ws::RSV1$::ws::RSV2$::ws::RSV3$OPCODE]
-
-        #::ws::log"length [string length $payload] binary $::ws::FIN$::ws::RSV1$::ws::RSV2$::ws::RSV3$OPCODE"
-        set payload_length [string length $payload]
-
-        if {$payload_length <= 125} {
-            if {$mask} {
-                append msg [format %c [expr {0x80 | $payload_length}]]
-            } else {
-                append msg [format %c $payload_length]
-            }
-        } elseif {$payload_length <= 0xFFFF} {
-            # 126 -> the next 2 bytes give the payload length
-            if {$mask} {
-                append msg [format %c 254]
-            } else {
-                append msg [format %c 126]
-            }
-            append msg [format %c [expr {$payload_length >> 8}]]
-            append msg [format %c [expr {($payload_length & 0x00FF) >> 0}]]
-        } else {
-            # 127 -> the next 8 bytes give the payload length
-            if {$mask} {
-                append msg [format %c 255]
-            } else {
-                append msg [format %c 127]
-
-            }
-            append msg [format %c [expr {($payload_length & 0xFFFFFFFFFFFFFFFF) >> 56}]]
-            append msg [format %c [expr {($payload_length & 0x00FFFFFFFFFFFFFF) >> 48}]]
-            append msg [format %c [expr {($payload_length & 0x0000FFFFFFFFFFFF) >> 40}]]
-            append msg [format %c [expr {($payload_length & 0x000000FFFFFFFFFF) >> 32}]]
-            append msg [format %c [expr {($payload_length & 0x00000000FFFFFFFF) >> 24}]]
-            append msg [format %c [expr {($payload_length & 0x0000000000FFFFFF) >> 16}]]
-            append msg [format %c [expr {($payload_length & 0x000000000000FFFF) >>  8}]]
-            append msg [format %c [expr {($payload_length & 0x00000000000000FF) >>  0}]]
-        }
-        if {$mask} {
-            #set frame_mask [binary decode hex 37fa213d]
-            set frame_mask [ns_crypto::randombytes -encoding binary 4]
-            set payload    [::ws::mask $frame_mask $payload]
-            append msg $frame_mask $payload
-        } else {
-            append msg $payload
-        }
-
-        return $msg
-    }
-
-    nsf::proc ::ws::mask {
-        frame_mask
-        payload
-    } {
-        set unmasked_payload ""
-
-        # scan the 4 bytes of the mask
-        binary scan $frame_mask cccc m(0) m(1) m(2) m(3)
-
-        #::ws::log "mask: $m(0) $m(1) $m(2) $m(3) "
-        for {set i 0} {$i < [string length $payload]} {incr i} {
-            set p [expr {$i % 4}]
-            append unmasked_payload [format %c [expr {[scan [string index $payload $i] %c] ^ ($m($p) & 255) }]]
-        }
-        #set payload [encoding convertfrom utf-8 $unmasked_payload]
-        return $unmasked_payload
-    }
-
-    #
-    # Decode message(s) from a client
-    #
-
-    nsf::proc ::ws::decode_msg {
+    nsf::proc ::ws::io_writable {
         channel
-        msg
+        callback
+        condition
     } {
+        # When continue is 1, the event will fire again; when continue
+        # is 0 channel will be closed.  A continue of 2 means cancel
+        # the callback, but don't close the channel.
+        #
+        log "ws::io_writable on $channel (condition $condition)"
 
-        ::ws::log "ws::decode [string length $msg] bytes"
-
-        set b     [scan [string index $msg 0] %c]
-        set byte2 [scan [string index $msg 1] %c]
-        if {$b ne "" && $byte2 ne ""} {
-            # ------- FIRST BYTE --------------
-            # first byte is FIN + RSV[1-3] + Opcode
-            set FIN            [expr {($b & 0b11111111) >> 7}]
-            set RSV1           [expr {($b & 0b01111111) >> 6}]
-            set RSV2           [expr {($b & 0b00111111) >> 5}]
-            set RSV3           [expr {($b & 0b00011111) >> 4}]
-            # 0 = CONTINUATION, 1 = Text, 2 = Binary, 8 = close, 9 = Ping, 10 = Pong
-            set OPCODE         [expr {($b & 0b00001111)}]
-
-            # ------- SECOND BYTE --------------
-            set MASK           [expr {($byte2 & 0b11111111) >> 7}]
-            set PAYLOAD_LENGTH [expr {($byte2 & 0b01111111)}]
-
-            #::ws::log "FIN: $FIN, RSVs: $RSV1 $RSV2 $RSV3, Opcode: $OPCODE, Mask: $MASK, Payload_Length: $PAYLOAD_LENGTH"
-
-            if {$PAYLOAD_LENGTH <= 125} {
-                # just cut away first 2 bytes
-                set msg [string range $msg 2 end]
-            } elseif {$PAYLOAD_LENGTH == 126} {
-                # the payload length is in the next two bytes
-                set b [scan [string index $msg 2] %c]
-                set PAYLOAD_LENGTH [expr {$b << 8}]
-                set b [scan [string index $msg 3] %c]
-                set PAYLOAD_LENGTH [expr {$PAYLOAD_LENGTH + $b}]
-                # cut away first 2 + 2 bytes
-                set msg [string range $msg 4 end]
-            } elseif {$PAYLOAD_LENGTH == 127} {
-                # the payload length is in the next eight bytes
-                set PAYLOAD_LENGTH 0
-                for {set i 0} {$i<8} {incr i} {
-                    set b [scan [string index $msg [expr {2+$i}]] %c]
-                    set PAYLOAD_LENGTH [expr {($PAYLOAD_LENGTH << 8) + $b}]
-                }
-                set msg [string range $msg 10 end]
-            }
-            if {$MASK} {
-                set frame_mask [string range $msg 0 3]
-                set msg [string range $msg 4 end]
-            } else {
-                set mask_length 0
-            }
-
-            #
-            # The following loop is suboptimal, but an improvement to
-            # the previous state. In case the frame of the client is
-            # larger than 16KB, the package will be transmitted (at
-            # least via TLS) in multiple chunks. Previous versions did
-            # not handle this case at all. So, when the PAYLOAD_LENGTH
-            # is larger than the reveived message, we read in a busy
-            # loop until the frame is complete (or the transmission
-            # runs into an error). In general, it would be better to
-            # switch to a different callback handling the reading of
-            # the remaining bytes for this channel (without
-            # potentially blocking other transmissions).
-            #
-            while {$PAYLOAD_LENGTH > [string length $msg]} {
-                ::ws::log "partial payload length $channel: $PAYLOAD_LENGTH length msg [string length $msg]"
-                set diff [expr {$PAYLOAD_LENGTH - [string length $msg]}]
-                ::ws::log ".... missing payload: $diff bytes"
-                set chunk [ns_connchan read $channel]
-                ::ws::log "..... received [string length $chunk]"
-                if {[string length $msg] == 0} {
-                    ::ws::log "..... connchan read returned empty (channel $channel)"
-                    break
-                }
-                append msg $chunk
-            }
-
-            set payload      [string range $msg 0 $PAYLOAD_LENGTH-1]
-            set rest_payload [string range $msg $PAYLOAD_LENGTH end]
-
-            if {$MASK} {
-                set payload [::ws::mask $frame_mask $payload]
-            }
-
-            ::ws::log "payload length $channel: $PAYLOAD_LENGTH length msg [string length $msg]\
-                       (rest [string length $rest_payload] bytes)"
+        set result [ns_connchan write -buffered $channel ""]
+        set status [ns_connchan status $channel]
+        log "ws::io_writable result <$result> status $status"
+        if {$result == 0 || [dict get $status sendbuffer] > 0} {
+            ns_log warning "ws::io_writable was not successful flushing the buffer " \
+                "(still [dict get $status sendbuffer])... trigger again. status: $status"
+            set continue 1
         } else {
-            error "::ws::decode_msg: could not decode: '[binary encode hex $msg]'"
-        }
-        #::ws::log "opcode $OPCODE, mask $MASK payload length $PAYLOAD_LENGTH <$payload>"
-
-        if {$FIN == 0 && ($OPCODE == 0 || $OPCODE == 1 || $OPCODE == 2) } {
             #
-            # This is not the last frame of the message, so we store
-            # it as a fragment in a nsv.
+            # All was sent, fall back to normal read-event driven handler
             #
-            # ::ws::log "FRAGMENTED WS MESSAGE: $payload"
-            nsv_append ws "fragments-$channel" $payload
-            set payload ""
-        } elseif {$FIN == 1 && $OPCODE == 0} {
-            #
-            # This is the end of the message and we have a
-            # continuation frame append this payload to the message
-            # and return it.
-            #
-            set payload [nsv_set -reset ws "fragments-$channel" ""]$payload
+            set continue 1
+            #ns_log notice "ws::io_writable all was sent, register callback for reading "
+            ns_connchan callback $channel [list ws::io $channel $callback] rex
+            #ns_log notice "ws::io_writable all was sent, register callback for reading DONE"
         }
 
-        if {$OPCODE == 1} {
-            set payload [encoding convertfrom utf-8 $payload]
-        }
+        log "ws::io_writable returns $continue (channel $channel)"
+        return $continue
 
-        return [list $payload $rest_payload $OPCODE]
     }
 
     #
-    # Subscribe to a named WebSocket channel feed
+    # Subscribe to a named WebSocket channel feed.
     #
     nsf::proc ::ws::subscribe {
         channel
@@ -386,9 +321,8 @@ namespace eval ::ws {
     } {
         ns_log notice "unsubscribing $channel"
 
-        if {[nsv_exists ws "multicast-$subscription"]} {
+        if {[nsv_get ws "multicast-$subscription" subscribers]} {
             ns_mutex eval [nsv_get ws subscription_mutex] {
-                set subscribers [nsv_get ws "multicast-$subscription"]
                 set idx [lsearch -exact $subscribers $channel]
                 nsv_set ws "multicast-$subscription" [lreplace $subscribers $idx $idx]
             }
@@ -397,7 +331,8 @@ namespace eval ::ws {
 
     #
     # Send a WebSocket message to "all" or to subscribers of a named
-    # feed. It is expected that msg is already encoded (via ws::build_msg).
+    # feed. It is expected that the msg is already already encoded as
+    # a frame.
     #
     nsf::proc ::ws::multicast {
         {-exclude ""}
@@ -405,25 +340,33 @@ namespace eval ::ws {
         msg
     } {
         if {$subscription ne "all"} {
+            #
+            # Send message to all subscribers
+            #
             #::ws::log "ws::multicast send to subscriber of $subscription"
-            if {[nsv_exists ws "multicast-$subscription"]} {
-                foreach channel [nsv_get ws "multicast-$subscription"] {
+            if {[nsv_get ws "multicast-$subscription" channels]} {
+                foreach channel $channels {
                     #::ws::log "Sending to $channel"
                     if {$channel ni $exclude} {
                         if {![ws::send $channel $msg]} {
                             # we got an error, the channel is probably closed
+                            ws::log "ws::multicast: automatically unsubscribe $channel from $subscription due to error"
                             ws::unsubscribe $channel $subscription
                         }
                     }
                 }
             }
         } else {
-            # send to all shared channels
+            #
+            # Send message to all shared channels. This is very
+            # dangerous, since probably connchans might be used also
+            # for other applications.
+            #
             #::ws::log "send to all <[ns_connchan list]> except <$exclude>"
             foreach channel_info [ns_connchan list] {
                 lassign $channel_info channel
                 if {$channel ni $exclude} {
-                    ::ws::log "Sending to $channel"
+                    ws::log "Sending to $channel"
                     ws::send $channel $msg
                 }
             }
@@ -431,7 +374,11 @@ namespace eval ::ws {
     }
 
     #
-    # Send a WebSocket message (built by ws::build_msg) to a single client
+    # Send a WebSocket frame (built by ns_connchan wsframe) to a
+    # single client.
+    #
+    # A result of 1 means success, 0 means something went wrong,
+    # connection should be terminated.
     #
     nsf::proc ::ws::send {
         channel
@@ -439,17 +386,36 @@ namespace eval ::ws {
     } {
         #::ws::log "ws::send $channel"
 
-        if [catch {
-            ns_connchan write $channel $msg
-        } errmsg] {
-            return 0
-        } else {
+        try {
+            ns_connchan write -buffered $channel $msg
+
+        } on ok {nrBytesSent} {
+            #ns_log notice "ws::send $channel -> $nrBytesSent"
+            set toSend [string length $msg]
+            if {$nrBytesSent < $toSend} {
+                set status [ns_connchan status $channel]
+                ns_log warning "ws::send: partial write on $channel: " \
+                    "actually sent $nrBytesSent toSend $toSend\n$status"
+                #
+                # We must register a callback for the socket becoming writable again.
+                #
+                set previousCallback [dict get $status callback]
+                set previousCondition [dict get $status condition]
+                if {$previousCondition ne "wex"} {
+                    set callback [lindex $previousCallback 2]
+                    ns_connchan callback $channel [list ws::io $channel $callback] wex
+                    ::ws::log "Switch registered callback <$callback> wex"
+                }
+            }
             return 1
+        } on error {errorMsg} {
+            ns_log warning "ws::send $channel returned error: $errorMsg"
+            return 0
         }
     }
 
     #
-    # initialize package
+    # Initialize package.
     #
     if {![nsv_exists ws mutex]} {
         nsv_set ws subscription_mutex [ns_mutex create websocket-subscription]
@@ -519,21 +485,60 @@ namespace eval ::ws::client {
     }
 
     nsf::proc ::ws::client::send {chan msg} {
-        ns_connchan write $chan [::ws::build_msg -mask $msg]
+        ns_connchan write $chan [ns_connchan wsframe -mask $msg]
     }
 
     nsf::proc ::ws::client::receive {chan} {
-        lassign [::ws::decode_msg $chan [ns_connchan read $chan]] replyText reminder opcode
-        switch $opcode {
-            1 { set replyText [encoding convertfrom utf-8 $replyText]}
-            2 {}
-            default { ns_log notice "no special handling of opcode $opcode"}
+        #
+        # Read a single message and return it
+        #
+        while {1} {
+            #
+            # In case the received message does not have opcode 1,
+            # read on until either sich a message or an error occurs.
+            #
+            set d [::ws::receive_msg $chan]
+            if {[dict exists $d payload]} {
+                switch [dict get $d opcode] {
+                    1 {
+                        #
+                        # Here we are done, we received the full
+                        # message with the right opcode.
+                        #
+                        return [dict get $d payload]
+                    }
+                    default { ns_log notice "no special handling of opcode $opcode"}
+                }
+            } elseif {[dict get $d frame] eq "exception" || [dict get $d continue] != 1} {
+                ns_log Warning "exception on websocket: $d"
+                break
+            }
         }
-        return $replyText
     }
 
     nsf::proc ::ws::client::close {chan} {
         ns_connchan close $chan
+    }
+}
+
+if {$::ws::echo_service} {
+    ns_register_proc GET /websocket/echo ::ws::echo::connect
+    namespace eval ws::echo {
+        nsf::proc connect {} {
+            set chat [ns_conn url]
+            set channel [ws::handshake -callback [list ws::echo::send -chat $chat]]
+            ws::subscribe $channel $chat
+        }
+
+        nsf::proc send {
+            {-chat "chat"}
+            channel msg
+        } {
+            #ns_log notice "ws::test::echo call send"
+            set r [::ws::send $channel [ns_connchan wsframe $msg]]
+            #ns_log notice "ws::test::echo returns <$r>"
+            return $r
+        }
     }
 }
 

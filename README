@@ -1,7 +1,7 @@
 
 WebSockets for NaviServer
 =========================
-Release 0.2
+Release 0.3
 -----------
 
     neumann@wu-wien.ac.at
@@ -9,8 +9,8 @@ Release 0.2
 
 This is a NaviServer module that implements WebSockets for NaviServer
 and provides an API for it. The WebSockets are integrated in
-NaviServer using the ns_chan command, which are be part version
-4.99.7 of NaviServer.
+NaviServer using the ns_chan command. The current implementation
+requires NaviServer 4.99.20 or newer.
 
 Connections are established via ws::handshake, which is typically
 initiated via JavaScript. Common libraries such as jQueries provided
@@ -88,12 +88,10 @@ Usage:
 
 The provided WebSocket server API consists of the following commands:
 
-    ws::build_msg ?-opcode /value/? /payload/
-    ws::decode_msg /channel/ /msg/
     ws::handshake ?-readevent /boolean/? ?-callback /script/?
     ws::log /msg/
     ws::multicast ?-exclude /value/? /subscription/ /msg/
-    ws::readable /channel/ /callback/ /when/
+    ws::io /channel/ /callback/ /when/
     ws::send /channel/ /msg/
     ws::subscribe /channel/ /subscription/
     ws::unsubscribe /channel/ /subscription/
