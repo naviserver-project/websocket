@@ -248,7 +248,7 @@ namespace eval ::ws {
                     1 -
                     2 { if {$callback ne ""} { {*}$callback $channel [dict get $d payload] }}
                     8 { set continue 0 }
-                    9 { ws::send $channel [ns_connchan wsframe -opcode pong "PONG"] }
+                    9 { ws::send $channel [ns_connchan wsencode -opcode pong "PONG"] }
                     default { }
                 }
             }
@@ -374,7 +374,7 @@ namespace eval ::ws {
     }
 
     #
-    # Send a WebSocket frame (built by ns_connchan wsframe) to a
+    # Send a WebSocket frame (built by ns_connchan wsencode) to a
     # single client.
     #
     # A result of 1 means success, 0 means something went wrong,
@@ -485,7 +485,7 @@ namespace eval ::ws::client {
     }
 
     nsf::proc ::ws::client::send {chan msg} {
-        ns_connchan write $chan [ns_connchan wsframe -mask $msg]
+        ns_connchan write $chan [ns_connchan wsencode -mask $msg]
     }
 
     nsf::proc ::ws::client::receive {chan} {
@@ -535,7 +535,7 @@ if {$::ws::echo_service} {
             channel msg
         } {
             #ns_log notice "ws::test::echo call send"
-            set r [::ws::send $channel [ns_connchan wsframe $msg]]
+            set r [::ws::send $channel [ns_connchan wsencode $msg]]
             #ns_log notice "ws::test::echo returns <$r>"
             return $r
         }
