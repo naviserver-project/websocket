@@ -246,7 +246,7 @@ namespace eval ::ws {
             if {$continue && [dict exists $d payload]} {
                 switch [dict get $d opcode] {
                     1 -
-                    2 { if {$callback ne ""} { {*}$callback $channel [dict get $d payload] }}
+                    2 { if {$callback ne ""} { {*}$callback $ch1annel [dict get $d payload] }}
                     8 { set continue 0 }
                     9 { ws::send $channel [ns_connchan wsencode -opcode pong "PONG"] }
                     default { }
@@ -519,6 +519,20 @@ namespace eval ::ws::client {
     nsf::proc ::ws::client::close {chan} {
         ns_connchan close $chan
     }
+
+    nsf::proc -deprecated ::ws::build_msg {
+        {-opcode "text"}
+        {-mask:switch}
+        payload
+    } {
+        #
+        # This function is just easier migration, since "connchan
+        # wsencode" provides a superset of functionality.
+        #
+        set maskArg [expr {$mask ? "-mask" : ""}]
+        return [ns_connchan wsencode {*}$maskArg -opcode $opcode $payload]
+    }
+
 }
 
 if {$::ws::echo_service} {
