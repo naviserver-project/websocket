@@ -246,7 +246,7 @@ namespace eval ::ws {
             if {$continue && [dict exists $d payload]} {
                 switch [dict get $d opcode] {
                     1 -
-                    2 { if {$callback ne ""} { {*}$callback $ch1annel [dict get $d payload] }}
+                    2 { if {$callback ne ""} { {*}$callback $channel [dict get $d payload] }}
                     8 { set continue 0 }
                     9 { ws::send $channel [ns_connchan wsencode -opcode pong "PONG"] }
                     default { }
@@ -291,7 +291,6 @@ namespace eval ::ws {
 
         log "ws::io_writable returns $continue (channel $channel)"
         return $continue
-
     }
 
     #
