@@ -252,7 +252,7 @@ namespace eval ::ws {
                     default { }
                 }
             }
-            if {![dict get $d havedata]} {
+            if {[dict exists $d havedata] && ![dict get $d havedata]} {
                 break
             }
         }
