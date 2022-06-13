@@ -1,0 +1,250 @@
+commit b30472fb246de15e098fdfa3cc112e47c28d88d0
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2021-07-26
+
+    guard "dict get" operation by "dict exists" statement
+
+M	websocket-procs.tcl
+
+commit d72d6c5ae57d4804ae599b4dd274f9905833d56a
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2021-06-21
+
+    fix typo
+
+M	websocket-procs.tcl
+
+commit 373c4ecf12b446f9b063e708abd3553058dd2223
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2021-01-04
+
+    added deprecated function ::ws::build_msg for providing better backward compatibility
+
+M	websocket-procs.tcl
+
+commit 474267bfbbdbff78a9288ef35289b1ba63c9062a
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2021-01-01
+
+    use ns_connchan "wsencode" instead of "wsframe" since it leaves room for a decode operation
+
+M	websocket-procs.tcl
+
+commit d7e5d364083a62e8c6ce07ab4ac4832f7d0b4a33
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2020-12-31
+
+    Major rewrite, using C-level implementing in ns_connchan
+    
+    This version make uses of the new C-level support for WebSockets.
+    The new version is several orders of magnitudes faster than the
+    previous version, it is more robust (C-level handling of
+    partial read and write operations) and it is more complete
+    than previous versions (handling segmented messages)
+
+M	README
+M	websocket-procs.tcl
+
+commit bd61f0f932e83c8cea9da6163f4511c7b36bfdc9
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2020-12-16
+
+    make parsing slightly more robust, use atomic nsv updates
+
+M	websocket-procs.tcl
+
+commit 0edbf1bdabc9b2ac33d6d6f72003500f50a2585d
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2020-11-27
+
+    provide name for mutex lock to ease tracing of long locks
+
+M	websocket-procs.tcl
+
+commit ab80f28a3c91675c242dabb49ca460e24364f65d
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2020-10-21
+
+    simplify code, and don't mask beyond end of payload
+
+M	websocket-procs.tcl
+
+commit 56a76a538425dc26fc030f6a62956b46177f5494
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2020-10-21
+
+    handling rest bytes (package longer than a WS frame)
+
+M	websocket-procs.tcl
+
+commit 82800461b1403eda6113cd7f41f55aae39dc4b07
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2020-07-15
+
+    fixed 2 potential issues:
+    
+    a) in case the websocket client sends messages >16KB, the packet is split (at least with HTTPS), which was not handled correctly before.
+    b) the code was converting always to UTF8, also in binary cases
+
+M	websocket-procs.tcl
+
+commit a7db0fb1383ffd52731dd4d9b616698814abf213
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2020-07-14
+
+    add UTF-8 decoding of the returned text message
+
+M	websocket-procs.tcl
+
+commit feaa885284f08e9e80664fedf6c6d4539af242ee
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2020-07-14
+
+    Added client-side SNI (requires recent version of NaviServer)
+
+M	websocket-procs.tcl
+
+commit 521c9bfa70ffb4c1730225e8f18f24697c40de5d
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2020-07-13
+
+    bump version number
+
+M	README
+
+commit 07068de20fc2ec48448ff84624bec4e4526ae58f
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2020-07-13
+
+    added simple websocket client interface
+
+M	README
+M	log-view.tcl
+M	websocket-procs.tcl
+
+commit 5008634dde2a59a154a16c008c918baac4820a4f
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2019-08-10
+
+    improve spelling
+
+M	README
+
+commit b6b7c769651c27322a72feb9c2d31d70bbc3be8b
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2019-08-04
+
+    Compatibility for Tcl 8.7, which has no "identity" encoding anymore
+
+M	websocket-procs.tcl
+
+commit 6ca02a329a8cef8a5dedde6b1fafabda0780982f
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2019-08-04
+
+    fix startup messages
+
+M	chat.tcl
+M	log-view.tcl
+
+commit 22bd4f640c2e9f1180d5f266add51227c46061c6
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2018-11-04
+
+    downgrade message from "error" to "warning", since exception during log rotate are not unlikely
+
+M	log-view.tcl
+
+commit 2cc014070851e321a53a658d25ad4a88889e1f63
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2018-08-15
+
+    whitespace cleanup and make spelling more consistent
+
+M	chat.tcl
+M	log-view.tcl
+M	websocket-procs.tcl
+
+commit a3f56089089c769dfb0bc10383d24de087e0bca2
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2018-05-05
+
+    Make sure, to send the upgrade header as a single block
+
+M	websocket-procs.tcl
+
+commit 54ed37e3e9bde435604afccba8ea5cd8e89ec4ff
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2018-05-05
+
+    remove duplicated word
+
+M	README
+
+commit 48d7984f10302c25807ac7ff244b514ef1898072
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2017-04-22
+
+    Fix spelling errors
+
+M	log-view.tcl
+M	websocket-procs.tcl
+
+commit 7695e8d4ec115e824ea8f3b321822d54afae3244
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2016-01-11
+
+    - make test more precise
+
+M	websocket-procs.tcl
+
+commit 7f6da2e95123b05b5463e8b38ff8c8bea92eeb24
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2015-02-23
+
+    - improvided links to cdn in sample scripts
+    - updated README file
+
+M	README
+M	chat.adp
+M	log-view.adp
+
+commit 62a51aced13558c84d97aca963372ed67e023c06
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2015-01-05
+
+    - improve README
+
+M	README
+
+commit 1756ceb5fda41a99d09ea3014849c4ed2ef1c4e3
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2015-01-05
+
+    - remove debugging line, make output in error.log more consistent
+
+M	log-view.tcl
+
+commit 2fe82a60fe90620c98eb473b444dade25e4487b4
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2015-01-05
+
+    - add installation instructions
+
+M	README
+
+commit 61d1e764b396950540c1db39c53d0513a27ed0f2
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2015-01-05
+
+    Initial Revision of web sockets
+
+A	LICENSE
+A	Makefile
+A	README
+A	chat.adp
+A	chat.tcl
+A	log-view.adp
+A	log-view.tcl
+A	makevars.txt
+A	websocket-procs.tcl
