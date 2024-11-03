@@ -59,7 +59,7 @@ namespace eval ws::log {
 
     nsv_set watch files [list [ns_accesslog file] [ns_info log]]
 
-    ns_thread begindetached -name tail {
+    ns_thread create -detached -name tail {
         #
         # The global state of the currently watched files is
         # maintained in the associative array "watched". The keys are
@@ -67,7 +67,7 @@ namespace eval ws::log {
         #
         array set ::watched {}
 
-        ns_log notice DETACHED=[ns_info server]
+        ns_log notice "ws::log creates detached thread server '[ns_info server]'"
 
         #
         # Close all files which are currently nor watched
