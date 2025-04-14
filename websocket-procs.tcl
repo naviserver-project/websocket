@@ -42,7 +42,7 @@ namespace eval ::ws {
         {-readevent:boolean true}
         {-callback ""}
     } {
-        #::ws::log handshake
+        ::ws::log handshake
 
         set h [ns_conn headers]
         if {[ns_set iget $h upgrade] eq "websocket"} {
@@ -65,10 +65,12 @@ namespace eval ::ws {
             # configured.  Otherwise, we could run into an issue with
             # the current revproxy.
             #
-            # In Tcl 8.6, we should use [string cat ...] instead of
-            # the "append" stunt.
-            set _ {}
-            ns_write [append _ \
+            ::ws::log  HANDSHAKE\n[string cat \
+                          "HTTP/1.1 101 Switching Protocols\r\n" \
+                          "Upgrade: websocket\r\n" \
+                          "Connection: Upgrade\r\n" \
+                          "Sec-WebSocket-Accept: ${reply}${protocol_line}\r\n\r\n"]
+            ns_write [string cat \
                           "HTTP/1.1 101 Switching Protocols\r\n" \
                           "Upgrade: websocket\r\n" \
                           "Connection: Upgrade\r\n" \
@@ -276,7 +278,7 @@ namespace eval ::ws {
         set status [ns_connchan status $channel]
         log "ws::io_writable result <$result> status $status"
         if {$result == 0 || [dict get $status sendbuffer] > 0} {
-            ns_log warning "ws::io_writable was not successful flushing the buffer " \
+            ns_log warning "ws::io_writable was not successful; draining the buffer " \
                 "(still [dict get $status sendbuffer])... trigger again. status: $status"
             set continue 1
         } else {
