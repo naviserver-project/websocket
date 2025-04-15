@@ -38,6 +38,19 @@ namespace eval ::ws {
         ns_log Debug(ws) {*}$args
     }
 
+    if {[ns_info version] >= 5.0} {
+        #
+        # 5.0 version, don't complain about deprecated "-buffered" option
+        #
+        #nsf::proc ::ws::write {channel data} {ns_connchan write $channel $data}
+        interp alias {} [namespace current]::write {} ns_connchan write
+    } else {
+        #
+        # legacy version
+        #
+        interp alias {} [namespace current]::write {} ns_connchan write -buffered
+    }
+
     nsf::proc ::ws::handshake {
         {-readevent:boolean true}
         {-callback ""}
@@ -274,7 +287,7 @@ namespace eval ::ws {
         #
         log "ws::io_writable on $channel (condition $condition)"
 
-        set result [ns_connchan write -buffered $channel ""]
+        set result [ws::write $channel ""]
         set status [ns_connchan status $channel]
         log "ws::io_writable result <$result> status $status"
         if {$result == 0 || [dict get $status sendbuffer] > 0} {
@@ -388,7 +401,7 @@ namespace eval ::ws {
         #::ws::log "ws::send $channel"
 
         try {
-            ns_connchan write -buffered $channel $msg
+            ws::write $channel $msg
 
         } on ok {nrBytesSent} {
             #ns_log notice "ws::send $channel -> $nrBytesSent"
