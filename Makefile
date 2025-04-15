@@ -11,12 +11,12 @@ endif
 MODNAME = websocket
 
 #
-# List of components to be installed as the the Tcl module section
+# List of components to be installed as the the Tcl module folder
 #
 TCL =	websocket-procs.tcl \
 	chat.adp chat.tcl \
 	log-view.tcl log-view.adp \
-	README
+	README.md
 
 #
 # Get the common Makefile rules
