@@ -335,12 +335,24 @@ namespace eval ::ws {
     } {
         ns_log notice "unsubscribing $channel"
 
-        if {[nsv_get ws "multicast-$subscription" subscribers]} {
+        set subscribers [::ws::subscribers $subscription]
+        if {[llength $subscribers] > 0} {
             ns_mutex eval [nsv_get ws subscription_mutex] {
                 set idx [lsearch -exact $subscribers $channel]
                 nsv_set ws "multicast-$subscription" [lreplace $subscribers $idx $idx]
             }
         }
+    }
+
+    #
+    # Obtain subscribers of a named feed.
+    #
+    nsf::proc ::ws::subscribers {
+        subscription
+    } {
+        set channels [list]
+        nsv_get ws "multicast-$subscription" channels
+        return $channels
     }
 
     #
@@ -358,15 +370,13 @@ namespace eval ::ws {
             # Send message to all subscribers
             #
             #::ws::log "ws::multicast send to subscriber of $subscription"
-            if {[nsv_get ws "multicast-$subscription" channels]} {
-                foreach channel $channels {
-                    #::ws::log "Sending to $channel"
-                    if {$channel ni $exclude} {
-                        if {![ws::send $channel $msg]} {
-                            # we got an error, the channel is probably closed
-                            ws::log "ws::multicast: automatically unsubscribe $channel from $subscription due to error"
-                            ws::unsubscribe $channel $subscription
-                        }
+            foreach channel [::ws::subscribers $subscription] {
+                #::ws::log "Sending to $channel"
+                if {$channel ni $exclude} {
+                    if {![ws::send $channel $msg]} {
+                        # we got an error, the channel is probably closed
+                        ws::log "ws::multicast: automatically unsubscribe $channel from $subscription due to error"
+                        ws::unsubscribe $channel $subscription
                     }
                 }
             }
